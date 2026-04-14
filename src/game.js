@@ -10,14 +10,14 @@ const overlayTitle = document.getElementById('overlay-title');
 const overlayMsg = document.getElementById('overlay-msg');
 
 // Game Constants
-const GRAVITY = 0.08; 
-const PLAYER_ACCEL = 0.6;
-const FRICTION = 0.9;
-const DASH_COOLDOWN = 4000;
-const DASH_DURATION = 300;
-const TETHER_LIFETIME = 2000;
-const TRIPWIRE_LIFETIME = 1500;
-const TETHER_SPEED = 10;
+const GRAVITY = 0.07; 
+const PLAYER_ACCEL = 0.7;
+const FRICTION = 0.88;
+const DASH_COOLDOWN = 3000;
+const DASH_DURATION = 250;
+const TETHER_LIFETIME = 2500;
+const TRIPWIRE_LIFETIME = 1800;
+const TETHER_SPEED = 12;
 
 // State
 let gameState = 'START';
@@ -37,18 +37,18 @@ const tethers = [];
 const player = {
     x: 0,
     y: 0,
-    w: 40,
-    h: 40,
+    w: 45,
+    h: 55,
     vx: 0,
     isDashing: false,
     dashTimer: 0,
     dashCooldown: 0,
     invulnTimer: 0,
-    color: '#0ff',
-    weaponMode: 'NORMAL'
+    color: '#fff',
+    accessoryColor: '#ff1493'
 };
 
-function spawnParticles(x, y, color, count = 10, speed = 3) {
+function spawnParticles(x, y, color, count = 10, speed = 4, type = 'square') {
     for (let i = 0; i < count; i++) {
         particles.push({
             x, y,
@@ -56,9 +56,41 @@ function spawnParticles(x, y, color, count = 10, speed = 3) {
             vy: (Math.random() - 0.5) * speed * 2,
             life: 1.0,
             decay: 0.01 + Math.random() * 0.02,
-            color
+            color,
+            size: 2 + Math.random() * 4,
+            type: Math.random() > 0.5 ? 'heart' : 'star'
         });
     }
+}
+
+function drawHeart(ctx, x, y, size, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(0, -size/2, -size, -size/2, -size, 0);
+    ctx.bezierCurveTo(-size, size/2, 0, size, 0, size * 1.5);
+    ctx.bezierCurveTo(0, size, size, size/2, size, 0);
+    ctx.bezierCurveTo(size, -size/2, 0, -size/2, 0, 0);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawStar(ctx, x, y, size, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        ctx.lineTo(Math.cos((18 + i * 72) / 180 * Math.PI) * size, 
+                   -Math.sin((18 + i * 72) / 180 * Math.PI) * size);
+        ctx.lineTo(Math.cos((54 + i * 72) / 180 * Math.PI) * (size/2), 
+                   -Math.sin((54 + i * 72) / 180 * Math.PI) * (size/2));
+    }
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
 }
 
 class Bubble {
@@ -66,11 +98,12 @@ class Bubble {
         this.x = x;
         this.y = y;
         this.size = size; 
-        this.radius = size * 15 + 5;
+        this.radius = size * 18 + 10;
         this.vx = vx;
         this.vy = vy;
-        this.color = color || `hsl(${Math.random() * 360}, 100%, 60%)`;
-        this.bounceHeight = -Math.sqrt(size * 15);
+        const hue = 320 + Math.random() * 40; // Pink/Purple range
+        this.color = color || `hsl(${hue}, 100%, 75%)`;
+        this.bounceHeight = -Math.sqrt(size * 18) * 1.1;
     }
 
     update() {
@@ -96,40 +129,50 @@ class Bubble {
         ctx.save();
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = this.color;
-        ctx.lineWidth = 3;
-        ctx.stroke();
         
-        const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius);
-        gradient.addColorStop(0, 'rgba(255,255,255,0.1)');
-        gradient.addColorStop(1, 'transparent');
-        ctx.fillStyle = gradient;
+        // Glossy bubble effect
+        const grad = ctx.createRadialGradient(this.x - this.radius/3, this.y - this.radius/3, 0, this.x, this.y, this.radius);
+        grad.addColorStop(0, '#fff');
+        grad.addColorStop(0.2, this.color);
+        grad.addColorStop(1, '#e91e63');
+        
+        ctx.fillStyle = grad;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = this.color;
         ctx.fill();
+        
+        // Highlight
+        ctx.beginPath();
+        ctx.arc(this.x - this.radius/2, this.y - this.radius/2, this.radius/4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fill();
+        
         ctx.restore();
     }
 
     split() {
-        spawnParticles(this.x, this.y, this.color, 12, 3);
-        shake = this.size * 1.5;
+        spawnParticles(this.x, this.y, '#fff', 15, 4);
+        spawnParticles(this.x, this.y, this.color, 10, 3);
+        shake = this.size * 2;
         
         if (this.size > 1) {
-            bubbles.push(new Bubble(this.x - 10, this.y, this.size - 1, -0.8, -2.5, this.color));
-            bubbles.push(new Bubble(this.x + 10, this.y, this.size - 1, 0.8, -2.5, this.color));
+            bubbles.push(new Bubble(this.x - 15, this.y, this.size - 1, -1.2, -3, this.color));
+            bubbles.push(new Bubble(this.x + 15, this.y, this.size - 1, 1.2, -3, this.color));
         }
         
-        score += this.size * 100;
+        score += this.size * 150;
         updateUI();
     }
 
     shatter() {
-        spawnParticles(this.x, this.y, this.color, 20, 5);
-        shake = 8;
+        spawnParticles(this.x, this.y, '#fff', 25, 6);
+        shake = 10;
         if (this.size > 1) {
             for (let i = 0; i < 3; i++) {
-                bubbles.push(new Bubble(this.x, this.y, 1, (Math.random() - 0.5) * 4, -2, this.color));
+                bubbles.push(new Bubble(this.x, this.y, 1, (Math.random() - 0.5) * 6, -3, this.color));
             }
         }
-        score += this.size * 200;
+        score += this.size * 300;
         updateUI();
     }
 }
@@ -177,28 +220,25 @@ class Tether {
         const dot = (((circle.x - x1) * (x2 - x1)) + ((circle.y - y1) * (y2 - y1))) / Math.pow(len, 2);
         const closestX = x1 + (dot * (x2 - x1));
         const closestY = y1 + (dot * (y2 - y1));
-
         if (dot < 0 || dot > 1) return false;
-
         const dist = Math.sqrt(Math.pow(closestX - circle.x, 2) + Math.pow(closestY - circle.y, 2));
         return dist < circle.radius;
     }
 
     draw() {
         ctx.save();
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#f0f';
-        ctx.strokeStyle = this.isStuck ? '#fff' : '#f0f';
-        ctx.lineWidth = this.isStuck ? 3 : 2;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#ff1493';
+        ctx.strokeStyle = this.isStuck ? '#fff' : '#ff1493';
+        ctx.lineWidth = 5;
+        ctx.setLineDash(this.isStuck ? [] : [10, 5]);
         ctx.beginPath();
         ctx.moveTo(this.x, player.y);
         ctx.lineTo(this.x, this.headY);
         ctx.stroke();
         
-        if (!this.isStuck) {
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(this.x - 3, this.headY - 3, 6, 6);
-        }
+        // Draw a heart at the tip
+        drawHeart(ctx, this.x, this.headY, 8, '#fff');
         ctx.restore();
     }
 }
@@ -210,7 +250,7 @@ function init() {
     window.addEventListener('keyup', e => keys[e.code] = false);
     
     player.x = canvas.width / 2;
-    player.y = canvas.height - player.h;
+    player.y = canvas.height - player.h - 10;
     
     requestAnimationFrame(gameLoop);
 }
@@ -218,8 +258,7 @@ function init() {
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    player.y = canvas.height - player.h;
-    player.x = Math.min(player.x, canvas.width - player.w);
+    player.y = canvas.height - player.h - 10;
 }
 
 function startLevel(lvl) {
@@ -227,14 +266,14 @@ function startLevel(lvl) {
     tethers.length = 0;
     particles.length = 0;
     
-    const count = Math.min(lvl, 3);
+    const count = Math.min(lvl + 1, 5);
     for (let i = 0; i < count; i++) {
-        const baseVX = (i % 2 === 0 ? 0.7 : -0.7);
-        const levelScale = (lvl - 1) * 0.05;
+        const baseVX = (i % 2 === 0 ? 0.8 : -0.8);
+        const levelScale = (lvl - 1) * 0.1;
         bubbles.push(new Bubble(
             (canvas.width / (count + 1)) * (i + 1),
-            150,
-            4,
+            100 + (i * 40),
+            Math.floor(Math.random() * 2) + 3,
             baseVX + (baseVX > 0 ? levelScale : -levelScale),
             0
         ));
@@ -254,15 +293,10 @@ function updateUI() {
 function handleInput() {
     if (gameState !== 'PLAYING') {
         if (keys['Space']) {
-            if (gameState === 'START') {
+            if (gameState === 'START' || gameState === 'GAMEOVER') {
                 score = 0;
                 lives = 3;
                 currentLevel = 1;
-                startLevel(currentLevel);
-            } else if (gameState === 'GAMEOVER') {
-                // Continue from the same level
-                lives = 3;
-                score = 0; 
                 startLevel(currentLevel);
             } else if (gameState === 'LEVEL_CLEAR') {
                 currentLevel++;
@@ -280,7 +314,8 @@ function handleInput() {
         player.dashTimer = DASH_DURATION;
         player.dashCooldown = DASH_COOLDOWN;
         player.invulnTimer = 600;
-        player.vx *= 3;
+        player.vx *= 3.5;
+        spawnParticles(player.x + player.w/2, player.y + player.h/2, '#fff', 15, 2);
     }
 
     if (keys['Space'] && tethers.length < 1) {
@@ -293,7 +328,7 @@ function gameLoop(time) {
     lastTime = time;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawGrid();
+    drawBackground();
 
     ctx.save();
     if (shake > 0) {
@@ -335,7 +370,7 @@ function updatePhysics() {
 
     const dashPerc = Math.max(0, 1 - (player.dashCooldown / DASH_COOLDOWN));
     dashFill.style.width = (dashPerc * 100) + '%';
-    dashLabel.innerText = dashPerc >= 1 ? 'READY' : 'COOLDOWN';
+    dashLabel.innerText = dashPerc >= 1 ? 'FABULOUS' : 'RECHARGING...';
 
     bubbles.forEach(b => b.update());
 
@@ -374,51 +409,52 @@ function updatePhysics() {
         setTimeout(() => {
             timeScale = 1;
             overlay.classList.remove('hidden');
-            overlayTitle.innerText = "LEVEL CLEAR";
-            overlayMsg.innerText = "PRESS [SPACE] FOR NEXT STAGE";
+            overlayTitle.innerText = "YOU'RE STUNNING!";
+            overlayMsg.innerText = "STAGE " + currentLevel + " COMPLETE";
         }, 1200);
     }
 }
 
 function playerHit() {
     lives--;
-    shake = 15;
-    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#f00', 30, 8);
+    shake = 20;
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff1493', 40, 10);
     updateUI();
     
     if (lives <= 0) {
         gameState = 'GAMEOVER';
         overlay.classList.remove('hidden');
-        overlayTitle.innerText = "GAME OVER";
-        overlayMsg.innerText = "RETRY LEVEL " + currentLevel + "? [SPACE]";
+        overlayTitle.innerText = "DREAM OVER";
+        overlayMsg.innerText = "STILL FABULOUS! RETRY? Stage " + currentLevel;
     } else {
-        startLevel(currentLevel);
+        player.invulnTimer = 2000;
+        player.x = canvas.width / 2;
     }
 }
 
-function drawGrid() {
-    ctx.strokeStyle = '#001a33';
-    ctx.lineWidth = 1;
-    const step = 80;
-    for (let i = 0; i < canvas.width; i += step) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, canvas.height);
-        ctx.stroke();
-    }
-    for (let i = 0; i < canvas.height; i += step) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(canvas.width, i);
-        ctx.stroke();
+function drawBackground() {
+    // Subtle sparkle pattern
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    const step = 100;
+    for (let x = 0; x < canvas.width; x += step) {
+        for (let y = 0; y < canvas.height; y += step) {
+            if ((x + y) % 200 === 0) {
+                ctx.beginPath();
+                ctx.arc(x + Math.sin(Date.now()/1000 + x)*10, y + Math.cos(Date.now()/1000 + y)*10, 2, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
     }
 }
 
 function drawEntities() {
     particles.forEach(p => {
         ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 3, 3);
+        if (p.type === 'heart') {
+            drawHeart(ctx, p.x, p.y, p.size, p.color);
+        } else {
+            drawStar(ctx, p.x, p.y, p.size, p.color);
+        }
     });
     ctx.globalAlpha = 1;
 
@@ -426,31 +462,44 @@ function drawEntities() {
 
     ctx.save();
     if (player.invulnTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
-        ctx.globalAlpha = 0.3;
+        ctx.globalAlpha = 0.4;
     }
     
     if (player.isDashing) {
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
-        ctx.fillRect(player.x - player.vx * 1.5, player.y, player.w, player.h);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fillRect(player.x - player.vx * 1.2, player.y, player.w, player.h);
     }
 
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = player.color;
-    ctx.fillStyle = player.color;
+    // Draw Barbie-style player (Stylized silhouette/dress shape)
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#ff1493';
     
+    // Dress
+    ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.moveTo(player.x + player.w / 2, player.y);
+    ctx.moveTo(player.x + player.w/2, player.y);
     ctx.lineTo(player.x, player.y + player.h);
     ctx.lineTo(player.x + player.w, player.y + player.h);
     ctx.closePath();
     ctx.fill();
     
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(player.x + player.w / 2 - 2, player.y + 12, 4, 8);
+    // Heart on dress
+    drawHeart(ctx, player.x + player.w/2, player.y + player.h/2, 6, '#ff1493');
+    
+    // Crown/Hair
+    ctx.fillStyle = '#ffd700'; // Gold crown
+    ctx.fillRect(player.x + player.w/2 - 10, player.y - 5, 20, 5);
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.w/2 - 10, player.y - 5);
+    ctx.lineTo(player.x + player.w/2 - 5, player.y - 12);
+    ctx.lineTo(player.x + player.w/2, player.y - 5);
+    ctx.lineTo(player.x + player.w/2 + 5, player.y - 12);
+    ctx.lineTo(player.x + player.w/2 + 10, player.y - 5);
+    ctx.fill();
+
     ctx.restore();
 
     bubbles.forEach(b => b.draw());
 }
 
 init();
-overlay.classList.remove('hidden');
